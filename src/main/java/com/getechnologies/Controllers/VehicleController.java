@@ -217,7 +217,7 @@ public class VehicleController {
 	}
 
 	@PostMapping("/resident-payments")
-    public void generateFile(@RequestBody FileNameRequest request, HttpServletResponse response) throws IOException {
+    public void residentPayments(@RequestBody FileNameRequest request, HttpServletResponse response) throws IOException {
         response.setContentType(CONTENT_TYPE);
         response.setHeader(CONTENT_DISPOSITION, ATTACHMENT_AND_FILENAME+request.getFile_name()+SLASH);
 
