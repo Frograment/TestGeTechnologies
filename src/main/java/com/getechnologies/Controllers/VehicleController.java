@@ -3,6 +3,7 @@ package com.getechnologies.Controllers;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
@@ -23,11 +24,11 @@ import com.getechnologies.Entities.Vehicle;
 import com.getechnologies.Entities.VehicleStay;
 import com.getechnologies.Objects.FileNameRequest;
 import com.getechnologies.Objects.LicensePlateRequest;
+import com.getechnologies.Objects.Response;
 import com.getechnologies.Services.OfficialListService;
 import com.getechnologies.Services.ResidentListService;
 import com.getechnologies.Services.VehicleService;
 import com.getechnologies.Services.VehicleStayService;
-import com.getechnologies.Services.Impl.VehicleServiceImpl;
 
 @RestController
 @RequestMapping()
@@ -35,6 +36,30 @@ public class VehicleController {
 	
 	final int MILISECONDS = 1000;
 	final int MINUTES = 60;
+	final int ONE = 1;
+	final int ZERO = 0;
+	
+	final String ATTACHMENT_AND_FILENAME =  "attachment; filename=\"";
+	final String COLUMNS_TTILES_FILE_TEXT = "Núm. placa	Tiempo estacionado (min.)	Cantidad a pagar";
+	final String CONTENT_DISPOSITION = "Content-Disposition";
+	final String CONTENT_TYPE = "text/plain";
+	final String CURRENCY = "MX";
+	final String EMPTY_STRING = "";
+	final String ENTRY_CREATED = "Entrada creada.";
+	final String NOT_ENTRY_YET_MESSAGE = "El vehiculo aun no ha entrado";
+	final String NO_RESIDENT = "No-Resident";
+	final String NO_RESIDENT_MESSAGE = "La cantidad a pagar es de: ";
+	final String OFFICIAL = "Official";
+	final String OFFICIAL_MESSAGE = "Se ha registrado la entrada y salida del vehiculo oficial.";
+	final String RESIDENT = "Resident";
+	final String RESIDENT_MESSAGE = "Los minutos del residente han sido actualizados";
+	final String SLASH = "\"";
+	final String VEHICLE_ALREADY_INSIDE = "El vehiculo ya ha ingresado.";
+	final String VEHICLE_NOT_FOUND_MESSAGE = "La placa del coche no eXiste";
+	final String WHITE_SPACE = " ";
+	
+	final double RESIDENT_COST = 0.05;
+	final double NO_RESIDENT_COST = 0.5;
 
 	@Autowired
 	private VehicleService vehicleService;
@@ -57,99 +82,107 @@ public class VehicleController {
 		List<VehicleStay> vehicleStays = vehicleStayService.findAll().stream()
 				.filter(veh -> veh.getLicense_plate().equals(licensePlate)).toList();
 		
-		if (vehicleStays.size() == 0)
+		if (vehicleStays.size() == ZERO)
 			return null;
-		return vehicleStays.get(vehicleStays.size() - 1);
+		return vehicleStays.get(vehicleStays.size() - ONE);
+	}
+
+	private Date getCurrentDate(){
+		LocalDateTime localDateTime = LocalDateTime.now();
+		return Timestamp.valueOf(localDateTime);
 	}
 
 	@PostMapping("/createEntry")
-	public String createEntry(@RequestBody LicensePlateRequest request) {
+	public Response createEntry(@RequestBody LicensePlateRequest request) {
+		Response response = new Response();
 		Vehicle vehicle = new Vehicle();
 		if (!vehicleService.existsById(request.getLicensePlate())) {
-			vehicle = new Vehicle(request.getLicensePlate(), "No-Resident", 0.0, 0);
+			vehicle = new Vehicle(request.getLicensePlate(), NO_RESIDENT, ZERO, ZERO);
 			if (officialListService.existsById(request.getLicensePlate())) {
-				vehicle.setType("Official");
+				vehicle.setType(OFFICIAL);
 			} else if (residentListService.existsById(request.getLicensePlate())) {
-				vehicle.setType("Resident");
+				vehicle.setType(RESIDENT);
 			}
 			vehicleService.save(vehicle);
 		}
 
 		VehicleStay current = getLastEntry(request.getLicensePlate());
 		if (current == null || current.getEgress() != null) {
-			LocalDateTime localDateTime = LocalDateTime.now();
-			Date date = java.sql.Timestamp.valueOf(localDateTime);
+			Date date = getCurrentDate();
 			VehicleStay vehicleStay = new VehicleStay(request.getLicensePlate(), date, null);
 			vehicleStayService.save(vehicleStay);
 		} else {
-			return "El vehiculo ya ha ingresado.";
+			response.setMessage(NOT_ENTRY_YET_MESSAGE);
+			return response;
 		}
-		return "Entrada creada.";
+		response.setMessage(ENTRY_CREATED);
+		return response;
 	}
 
 	@PostMapping("/createEgress")
-	public String createEgress(@RequestBody LicensePlateRequest request) {
-		String message = "Se ha registrado la entrada y salida.";
+	public Response createEgress(@RequestBody LicensePlateRequest request) {
+		Response response = new Response();
 		Vehicle vehicle = new Vehicle();
+		
 		if (!vehicleService.existsById(request.getLicensePlate())) {
-			message = "La placa del coche no esiste";
+			response.setMessage(VEHICLE_NOT_FOUND_MESSAGE);
 		} else {
 			vehicle = vehicleService.findById(request.getLicensePlate());
 
 			VehicleStay current = getLastEntry(request.getLicensePlate());
 			if (current.getEgress() == null) {
-				LocalDateTime localDateTime = LocalDateTime.now();
-				Date date = java.sql.Timestamp.valueOf(localDateTime);
+				Date date = getCurrentDate();
 				current.setEgress(date);
 				vehicleStayService.update(current);
 			
 
 			switch (vehicle.getType()) {
-
-			case "Resident":
+			case OFFICIAL:
+				response.setMessage(OFFICIAL_MESSAGE);
+				break;
+			case RESIDENT:
 				vehicle.setTotalTime(vehicle.getTotalTime()
 						+ (int) ((current.getEgress().getTime() - current.getEntry().getTime()) / (MILISECONDS*MINUTES)));
-				vehicle.setAmount(vehicle.getTotalTime() * 0.05);
+				vehicle.setAmount(vehicle.getTotalTime() * RESIDENT_COST);
 				vehicleService.update(vehicle);
-				message = "Los minutos del residente han sido actualizados";
+				response.setMessage(RESIDENT_MESSAGE);
 				break;
-			case "No-Resident":
-
-				// vehicle.setTotalTime(vehicle.getTotalTime()+(int)((current.getEgress().getTime()-current.getEntry().getTime())/3600));
-				// vehicle.setAmount(vehicle.getTotalTime()*0.5);
-				// vehicleService.update(vehicle);
+			case NO_RESIDENT:
 				int minutes = vehicle.getTotalTime()
 						+ (int) ((current.getEgress().getTime() - current.getEntry().getTime()) / (MILISECONDS*MINUTES));
-				double amount = minutes * 0.5;
-				message = "La cantidad a pagar es de: " + amount + " MX";
-				vehicle.setAmount(0.0);
-				vehicle.setTotalTime(0);
+				double amount = minutes * NO_RESIDENT_COST;
+				response.setMessage(NO_RESIDENT_MESSAGE + amount + WHITE_SPACE + CURRENCY);
+				vehicle.setAmount(ZERO);
+				vehicle.setTotalTime(ZERO);
 				vehicleService.update(vehicle);
 				break;
 			}
 			} else {
-				message =  "El vehiculo aun no ha entrado";
+				response.setMessage(NOT_ENTRY_YET_MESSAGE);
 			}
 		}
-		return message;
+		
+		return response;
 	}
 
-	@PostMapping("/addOfficialVehicle")
-	public OfficialList addOfficialVehicle(@RequestBody LicensePlateRequest licensePlate) {
-		if (vehicleService.existsById(licensePlate.getLicensePlate())) {
-			Vehicle vehicle = vehicleService.findById(licensePlate.getLicensePlate());
-			vehicle.setType("Official");
+	private void SetVehicleType(String licensePlate, String type){
+		if (vehicleService.existsById(licensePlate)) {
+			Vehicle vehicle = vehicleService.findById(licensePlate);
+			vehicle.setType(type);
 		}
-		return officialListService.save(new OfficialList(licensePlate.getLicensePlate()));
+	}
+
+
+	@PostMapping("/addOfficialVehicle")
+	public OfficialList addOfficialVehicle(@RequestBody LicensePlateRequest request) {
+		SetVehicleType(request.getLicensePlate(),OFFICIAL);
+		return officialListService.save(new OfficialList(request.getLicensePlate()));
 	}
 
 	@PostMapping("/addResidentVehicle")
-	public ResidentList addResidentVehicle(@RequestBody LicensePlateRequest licensePlate) {
-		if (vehicleService.existsById(licensePlate.getLicensePlate())) {
-			Vehicle vehicle = vehicleService.findById(licensePlate.getLicensePlate());
-			vehicle.setType("Resident");
-		}
-		return residentListService.save(new ResidentList(licensePlate.getLicensePlate()));
+	public ResidentList addResidentVehicle(@RequestBody LicensePlateRequest request) {
+		SetVehicleType(request.getLicensePlate(),RESIDENT);
+		return residentListService.save(new ResidentList(request.getLicensePlate()));
 	}
 
 	@PostMapping("/beginMonth")
@@ -157,19 +190,19 @@ public class VehicleController {
 		List<String> officialVehicles = vehicleService.findAll()
 				.stream()
 				.map(vehi -> {
-					if(vehi.getType().equals("Official")) {
+					if(vehi.getType().equals(OFFICIAL)) {
 						return vehi.getLicensePlate();
 					}
-					return "";
+					return EMPTY_STRING;
 				})
 				.collect(Collectors.toList());
 		
 		vehicleService.findAll()
 				.stream()
 				.forEach(vehi -> {
-					if(vehi.getType().equals("Resident")) {
-						vehi.setAmount(0);
-						vehi.setTotalTime(0);
+					if(vehi.getType().equals(RESIDENT)) {
+						vehi.setAmount(ZERO);
+						vehi.setTotalTime(ZERO);
 						vehicleService.update(vehi);
 					}
 					
@@ -185,19 +218,18 @@ public class VehicleController {
 
 	@PostMapping("/resident-payments")
     public void generateFile(@RequestBody FileNameRequest request, HttpServletResponse response) throws IOException {
-        response.setContentType("text/plain");
-        response.setHeader("Content-Disposition", "attachment; filename=\""+request.getFile_name()+"\"");
+        response.setContentType(CONTENT_TYPE);
+        response.setHeader(CONTENT_DISPOSITION, ATTACHMENT_AND_FILENAME+request.getFile_name()+SLASH);
 
         try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(response.getOutputStream()))) {
-            writer.write("Núm. placa	Tiempo estacionado (min.)	Cantidad a pagar");
+            writer.write(COLUMNS_TTILES_FILE_TEXT);
             writer.newLine();
         	vehicleService.findAll().forEach(vehi -> {
-        		if(vehi.getType().equals("Resident")) {
+        		if(vehi.getType().equals(RESIDENT)) {
         			try {
 						writer.write(vehi.toString());
 						writer.newLine();
 					} catch (IOException e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
         		}

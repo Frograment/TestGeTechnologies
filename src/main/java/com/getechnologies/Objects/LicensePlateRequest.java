@@ -7,11 +7,8 @@ public class LicensePlateRequest {
 		this.licensePlate = licensePlate;
 	}
 	
-	public LicensePlateRequest() {
-        // Constructor sin argumentos requerido por Jackson
-    }
+	public LicensePlateRequest() {}
 
-	
 	public String getLicensePlate() {
 		return licensePlate;
 	}

@@ -9,35 +9,27 @@ import com.getechnologies.Dao.OfficialListDao;
 import com.getechnologies.Dao.VehicleDao;
 import com.getechnologies.Entities.OfficialList;
 import com.getechnologies.Entities.Vehicle;
-import com.getechnologies.Repository.VehicleRepository;
 import com.getechnologies.Services.OfficialListService;
 import com.getechnologies.Services.VehicleService;
 
 @Service
 public class OfficialListServiceImpl implements OfficialListService{
 
-	
-	
 	@Autowired
 	private OfficialListDao dao;
 	
-	
-	
 	@Override
 	public List<OfficialList> findAll() {
-		
 		return (List<OfficialList>) dao.findAll();
 	}
 
 	@Override
 	public OfficialList save(OfficialList officialList) {
-		
 		return dao.save(officialList);
 	}
 
 	@Override
 	public OfficialList update(OfficialList officialList) {
-		
 		return dao.save(officialList);
 	}
 
@@ -49,7 +41,6 @@ public class OfficialListServiceImpl implements OfficialListService{
 	}
 	@Override
 	public Boolean existsById(String id) {
-		
 		return dao.existsById(id);
 	}
 }
